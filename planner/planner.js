@@ -136,7 +136,8 @@ function openForm(title, fields, values, onSave, onDelete) {
 const dayOpts = DAYS.map((d) => [d.id, d.short]);
 const itemFields = [{ n: 'name', l: 'Name', req: true }, { n: 'day', l: 'Day', type: 'select', opts: dayOpts }, { n: 'time', l: 'Start time', type: 'time', req: true }, { n: 'dur', l: 'Duration (minutes)', type: 'number' }, { n: 'place', l: 'Place (on site, an address or a Maps link)' }, { n: 'who', l: 'Who is it for', type: 'select', opts: [['Whole family', 'Whole family'], ['4 year old', '4 year old'], ['Toddler', 'Toddler']] }, { n: 'booked', l: 'Booked', type: 'check' }, { n: 'cost', l: 'Cost (optional)' }, { n: 'notes', l: 'Notes' }];
 
-function afterChange(dayId, plan) { render(); reconcile(dayId, plan || getPlan(dayId)); setTimeout(render, 50); }
+// reconcile after the change has come back through the sync listener, so new items are visible to it
+function afterChange(dayId, plan) { render(); setTimeout(() => { reconcile(dayId, plan || getPlan(dayId)); render(); }, store.mode === 'shared' ? 700 : 50); }
 function currentDay() { return dayById((location.hash || '#today').slice(1)) || todayDay(); }
 
 document.addEventListener('click', (ev) => {
