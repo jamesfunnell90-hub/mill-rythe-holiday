@@ -146,3 +146,6 @@ dialog .chk{display:flex;align-items:center;gap:8px;color:var(--ink)}dialog .chk
 .anim .grid>*{animation:rise .45s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0)*45ms + .15s)}
 
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+.ess{padding:10px 0;border-bottom:1px solid var(--line)}.ess:last-child{border:0}.ess p{margin:0 0 4px}
+.brief{border-left:5px solid var(--flag)}.brief pre{white-space:pre-wrap;word-break:break-word;font:14px/1.45 var(--body);margin:0}

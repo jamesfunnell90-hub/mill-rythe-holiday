@@ -1,11 +1,11 @@
-import { DAYS, CARDS, ESSENTIALS, SLOT_DEFAULT, PARK, MET_OFFICE, BOOKING_SITE } from './data.js';
+import { DAYS, CARDS, ESSENTIALS, SLOT_DEFAULT, PARK, MET_OFFICE, BOOKING_SITE, CHECKED } from './data.js';
 import * as store from './store.js';
 import * as weather from './weather.js';
 const ICONS = { swim: '🏊', nap: '😴', meal: '🍽️', show: '🎭', travel: '🚗', activity: '🎨', outing: '🌳', fixed: '🏨', added: '⭐' };
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const data = { shopping: [], packing: [], bookings: [], items: [] };
+const data = { shopping: [], packing: [], bookings: [], items: [], briefs: [] };
 const dayById = (id) => DAYS.find((d) => d.id === id);
 
 // ---- dates (always Europe/London) ----
@@ -23,6 +23,8 @@ const fmtTime = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Lon
 
 // ---- links ----
 const amaps = (q, mode) => 'https://maps.apple.com/?saddr=' + PARK.lat + ',' + PARK.lon + '&daddr=' + encodeURIComponent(q) + '&dirflg=' + mode;
+const dirLinks = (place) => '<a href="' + amaps(place, 'w') + '" target="_blank" rel="noopener">🚶 Walk there (Apple Maps)</a><a href="' + amaps(place, 'd') + '" target="_blank" rel="noopener">🚗 Drive there (Apple Maps)</a>';
+const srcList = (src) => src && src.length ? '<p class="muted tiny">Sources, checked ' + CHECKED + ': ' + src.map(([l, u]) => '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(l) + '</a>').join(', ') + '</p>' : '<p class="muted tiny">No source: treat as unverified.</p>';
 const tel = (p) => 'tel:' + p.replace(/\s/g, '');
 
 // ---- pieces ----
@@ -67,6 +69,12 @@ function timeline(day) {
   return '<ul class="timeline">' + rows.join('') + '</ul>';
 }
 
+function briefCard(day) {
+  const b = data.briefs.find((x) => x.date === day.date);
+  if (!b) return '';
+  return '<div class="card brief"><h3>Morning brief</h3><pre>' + esc(b.text) + '</pre><p class="muted tiny">Sent from the Mac at ' + fmtTime(b.at) + '.</p></div>';
+}
+
 function nextBooking() {
   const { date, time } = londonParts();
   const list = data.bookings.filter((b) => b.booked && b.day).map((b) => ({ ...b, d: dayById(b.day) })).filter((b) => b.d)
@@ -81,9 +89,9 @@ function cardHtml(id, full) {
   const c = CARDS[id]; if (!c) return '';
   const rows = [['Opening', c.hours], ['Cost', c.cost], ['Booking', c.booking], ['Drive from park', c.drive], ['Parking', c.parking], ['High chairs and baby change', c.fac]]
     .map(([k, v]) => '<tr><th>' + k + '</th><td>' + esc(v) + '</td></tr>').join('');
-  const links = [c.web ? '<a href="' + esc(c.web) + '" target="_blank" rel="noopener">Website</a>' : '', c.phone ? '<a href="' + tel(c.phone) + '">Call ' + esc(c.phone) + '</a>' : '', c.place ? '<a href="' + amaps(c.place, 'w') + '" target="_blank" rel="noopener">🚶 Walk there (Apple Maps)</a><a href="' + amaps(c.place, 'd') + '" target="_blank" rel="noopener">🚗 Drive there (Apple Maps)</a>' : ''].join('');
+  const links = [c.web ? '<a href="' + esc(c.web) + '" target="_blank" rel="noopener">Website</a>' : '', c.phone ? '<a href="' + tel(c.phone) + '">Call ' + esc(c.phone) + '</a>' : '', c.place ? dirLinks(c.place) : ''].join('');
   if (!full) return '<a class="card mini-card" href="#card/' + id + '"><b>' + esc(c.name) + '</b><div class="muted">' + esc(c.why) + '</div></a>';
-  return '<div class="card"><h2>' + esc(c.name) + '</h2><p>' + esc(c.what) + '</p><p><b>Why it suits us:</b> ' + esc(c.why) + '</p><table>' + rows + '</table><div class="links">' + links + '</div></div>';
+  return '<div class="card"><h2>' + esc(c.name) + '</h2><p>' + esc(c.what) + '</p><p><b>Why it suits us:</b> ' + esc(c.why) + '</p><table>' + rows + '</table><div class="links">' + links + '</div>' + srcList(c.src) + '</div>';
 }
 
 function altsBlock(day) {
@@ -105,7 +113,7 @@ function hero(day, isToday) {
 function viewDay(day, isToday) {
   const strip = '<nav class="days">' + DAYS.map((d) => '<a href="#day/' + d.id + '"' + (d.id === day.id ? ' class="on"' : '') + '>' + d.short + '</a>').join('') + '</nav>';
   return (isToday ? '' : strip) + hero(day, isToday) +
-    (isToday ? nextBooking() : '') + weatherBlock(day) + '<p class="muted tiny">' + esc(day.forecast) + '</p>' +
+    (isToday ? briefCard(day) + nextBooking() : '') + weatherBlock(day) + '<p class="muted tiny">' + esc(day.forecast) + '</p>' +
     '<h2>Plan</h2>' + timeline(day) + '<button class="btn" data-act="add-item" data-day="' + day.id + '">Add an item to this day</button>' +
     '<div class="card swap"><h3>Rain swap</h3><p>' + esc(day.rainSwap) + '</p></div>' + altsBlock(day);
 }
@@ -129,7 +137,7 @@ function viewBookings() {
 
 function viewInfo() {
   const groups = { 'On site': 'onsite', 'Food': 'food', 'Days out': 'outing' };
-  return '<h1>Essentials</h1><div class="card">' + ESSENTIALS.map((e) => '<p><b>' + esc(e.h) + '</b><br>' + esc(e.t) + '</p>').join('') + '</div>' +
+  return '<h1>Essentials</h1><div class="card">' + ESSENTIALS.map((e) => '<div class="ess"><p><b>' + esc(e.h) + '</b><br>' + esc(e.t) + '</p>' + (e.phone || e.place ? '<div class="links">' + (e.phone ? '<a href="' + tel(e.phone) + '">Call ' + esc(e.phone) + '</a>' : '') + (e.place ? dirLinks(e.place) : '') + '</div>' : '') + srcList(e.src) + '</div>').join('') + '</div>' +
     '<h2>All cards</h2>' + Object.entries(groups).map(([label, type]) => '<h3>' + label + '</h3><div class="grid">' + Object.keys(CARDS).filter((k) => CARDS[k].type === type).map((k) => cardHtml(k, false)).join('') + '</div>').join('');
 }
 
@@ -138,8 +146,8 @@ function render(anim) {
   let html = '';
   if (route[0] === 'day' && dayById(route[1])) html = viewDay(dayById(route[1]), false);
   else if (route[0] === 'card' && CARDS[route[1]]) html = '<a href="javascript:history.back()">Back</a>' + cardHtml(route[1], true);
-  else if (route[0] === 'shopping') html = listView('shopping', 'Shopping list', 'aisle', ['Dairy', 'Bakery', 'Cupboard', 'Drinks', 'Fruit and veg', 'Meat and fish', 'Baby', 'Household', 'Other']);
-  else if (route[0] === 'packing') html = listView('packing', 'Packing list', 'group', ['Storm-proof travel', 'Swim', 'Halloween', 'Toddler sleep', 'Car', 'Other']);
+  else if (route[0] === 'shopping') html = listView('shopping', 'Shopping list', 'aisle', ['Dairy', 'Bakery', 'Cupboard', 'Drinks', 'Fruit and veg', 'Meat and fish', 'Frozen', 'Baby', 'Household', 'Other']);
+  else if (route[0] === 'packing') html = listView('packing', 'Packing list', 'group', ['Storm-proof travel', 'Swim', 'Halloween', 'Toddler sleep', 'Two kids', 'Car', 'Other']);
   else if (route[0] === 'bookings') html = viewBookings();
   else if (route[0] === 'info') html = viewInfo();
   else if (route[0] === 'days') html = '<h1>Days</h1><div class="grid">' + DAYS.map((d) => '<a class="card mini-card" href="#day/' + d.id + '"><b>' + d.long + '</b><div class="muted">' + esc(d.theme) + '</div></a>').join('') + '</div>';
@@ -205,7 +213,7 @@ window.addEventListener('online', rerender); window.addEventListener('offline', 
 (async function boot() {
   render(true);
   await store.init();
-  ['shopping', 'packing', 'bookings', 'items'].forEach((c) => store.subscribe(c, (rows) => { data[c] = rows; rerender(); }));
+  ['shopping', 'packing', 'bookings', 'items', 'briefs'].forEach((c) => store.subscribe(c, (rows) => { data[c] = rows; rerender(); }));
   render();
   const go = async () => { await weather.refresh(); rerender(); };
   go();

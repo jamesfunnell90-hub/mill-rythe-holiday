@@ -1,7 +1,7 @@
 import { FIREBASE_CONFIG } from './firebase-config.js';
 import { SEED } from './data.js';
 
-const COLLS = ['shopping', 'packing', 'bookings', 'items'];
+const COLLS = ['shopping', 'packing', 'bookings', 'items', 'briefs'];
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
 const subs = {};
 let fs = null;
@@ -24,7 +24,7 @@ export function subscribe(c, cb) {
 function seedLocal() {
   try {
     if (localStorage.getItem('mrh:seeded1')) return;
-    COLLS.forEach((c) => writeLocal(c, SEED[c]));
+    COLLS.forEach((c) => writeLocal(c, SEED[c] || []));
     localStorage.setItem('mrh:seeded1', '1');
   } catch (e) { /* ignore */ }
 }
@@ -55,7 +55,7 @@ async function seedShared() {
     const ref = fs.doc(db, 'meta', 'seed1');
     const snap = await fs.getDoc(ref);
     if (snap.exists()) return;
-    for (const c of COLLS) for (const row of SEED[c]) { const { id, ...rest } = row; await fs.setDoc(fs.doc(db, c, id), rest); }
+    for (const c of COLLS) for (const row of (SEED[c] || [])) { const { id, ...rest } = row; await fs.setDoc(fs.doc(db, c, id), rest); }
     await fs.setDoc(ref, { at: Date.now() });
   } catch (e) { console.warn('seed skipped', e); }
 }
