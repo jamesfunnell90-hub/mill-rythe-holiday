@@ -72,7 +72,7 @@ function timeline(day) {
 function briefCard(day) {
   const b = data.briefs.find((x) => x.date === day.date);
   if (!b) return '';
-  return '<div class="card brief"><h3>Morning brief</h3><pre>' + esc(b.text) + '</pre><p class="muted tiny">Sent from the Mac at ' + fmtTime(b.at) + '.</p></div>';
+  return '<a class="card brief" href="morning/?d=' + esc(b.date) + '" style="display:block;text-decoration:none;color:inherit"><h3>Morning brief</h3><p style="margin:0 0 6px">' + esc(b.summary || b.text) + '</p><b class="more">Open the full brief</b><p class="muted tiny" style="margin:6px 0 0">Sent at ' + fmtTime(b.at) + '.</p></a>';
 }
 
 function nextBooking() {

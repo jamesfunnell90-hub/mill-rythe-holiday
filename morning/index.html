@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Morning brief</title>
+<meta name="description" content="Today's plan, weather, bookings and day bag for the Mill Rythe holiday.">
+<meta property="og:title" content="Morning brief: Mill Rythe Holiday">
+<meta property="og:description" content="Today's plan, weather, bookings and day bag.">
+<meta property="og:image" content="https://jamesfunnell90-hub.github.io/mill-rythe-holiday/icons/icon-512.png">
+<meta name="theme-color" content="#14305f">
+<link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+<style>body{margin:0;background:#F3EBDB}.load{font:16px -apple-system,Arial,sans-serif;padding:24px;color:#12233F}</style>
+</head>
+<body>
+<div id="root"><p class="load">Loading the morning brief</p></div>
+<script type="module">
+import * as store from '../js/store.js';
+import { briefBody, BRIEF_CSS } from '../js/brief-view.js';
+const st = document.createElement('style'); st.textContent = BRIEF_CSS; document.head.appendChild(st);
+const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+const d = new URLSearchParams(location.search).get('d') || p.year + '-' + p.month + '-' + p.day;
+const root = document.getElementById('root');
+let shown = false;
+await store.init();
+store.subscribe('briefs', (rows) => {
+  const b = rows.find((x) => x.date === d);
+  if (!b || !b.payload) { if (!shown) root.innerHTML = '<p class="load">No brief for ' + d + ' yet. It is sent at 06:00 each morning.</p>'; return; }
+  shown = true;
+  try { root.innerHTML = briefBody(JSON.parse(b.payload)); document.title = 'Morning brief: ' + JSON.parse(b.payload).long; } catch (e) { root.innerHTML = '<p class="load">This brief could not be read.</p>'; }
+});
+</script>
+</body>
+</html>
