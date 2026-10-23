@@ -48,6 +48,7 @@ export function briefBody(p) {
 <div class="hero"><div class="eye">Morning brief · Mill Rythe Holiday</div><h1>${esc(p.long)}</h1><div class="sub">${esc(p.theme)}</div></div>
 <div class="wrap">
 <div class="card"><h2>Weather</h2>${wxBlock}${p.forecastNote ? `<div class="n" style="margin-top:6px">${esc(p.forecastNote)}</div>` : ''}</div>
+${(p.warnings || []).length ? `<div class="card"><h2>Heads up</h2><ul>${p.warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
 ${fixed.length ? `<div class="card"><h2>Fixed times today</h2><ul class="fixedlist">${fixed.map((r) => `<li><b>${esc(r.t)}</b>${esc(r.title)}</li>`).join('')}</ul></div>` : ''}
 <div class="card"><h2>Today's plan</h2><table>${plan}</table></div>
 <div class="two">
