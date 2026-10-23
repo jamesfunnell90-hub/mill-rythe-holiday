@@ -61,6 +61,9 @@ function reconcile(dayId, plan) {
   for (const it of data.items.filter((i) => i.day === dayId && i.kind !== 'show' && i.booked)) {
     notes.push(ensureRow('bookings', 'kn-item-' + it.id, true, { name: it.name, day: dayId, time: it.time, bookBy: '', booked: true, notes: 'Added in the Planner' }, flag));
   }
+  for (const b of data.bookings.filter((x) => x.id.startsWith('kn-item-') && x.day === dayId)) {
+    if (!data.items.some((i) => 'kn-item-' + i.id === b.id)) notes.push(ensureRow('bookings', b.id, false, {}, flag));
+  }
   const fresh = notes.filter(Boolean).filter((n) => !knockNote.includes(n));
   knockNote = [knockNote, ...fresh].filter(Boolean).join('. ');
 }

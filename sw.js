@@ -1,4 +1,4 @@
-const VERSION = 'v6';
+const VERSION = 'v7';
 const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/data.js', 'js/store.js', 'js/weather.js', 'js/firebase-config.js', 'js/brief-view.js', 'planner/', 'planner/index.html', 'planner/planner.js', 'planner/planner.css', 'planner/engine.js', 'planner/store.js', 'morning/', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
