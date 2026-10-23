@@ -149,3 +149,15 @@ dialog .chk{display:flex;align-items:center;gap:8px;color:var(--ink)}dialog .chk
 
 .ess{padding:10px 0;border-bottom:1px solid var(--line)}.ess:last-child{border:0}.ess p{margin:0 0 4px}
 .brief{border-left:5px solid var(--flag)}.brief pre{white-space:pre-wrap;word-break:break-word;font:14px/1.45 var(--body);margin:0}
+
+#tabs a{font-size:11.5px;letter-spacing:.03em;padding:8px 0 7px}
+#tabs svg{width:22px;height:22px}
+.seg{display:flex;gap:6px;margin:12px 0 8px;overflow-x:auto}
+.seg button{flex:1 0 auto;border:1.5px solid var(--line);background:var(--surface);border-radius:99px;padding:8px 14px;font-weight:600;min-height:40px;cursor:pointer}
+.seg button.on{background:var(--sea);color:#fff;border-color:var(--sea)}
+.gwq{width:100%;font-size:16px;margin:2px 0 8px}
+.chips2{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:6px 12px;font-size:13px;min-height:34px;cursor:pointer;transition:background .15s}
+.chip small{color:var(--muted)}.chip.on{background:var(--sea-2);color:#fff;border-color:var(--sea-2)}.chip.on small{color:rgba(255,255,255,.8)}
+.gwlist{list-style:none;padding:0;margin:0}
+.gwrow{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 12px;margin:6px 0;box-shadow:var(--shadow)}

@@ -23,3 +23,10 @@ body{padding-bottom:40px}
 .timeline .b.freeb{background:transparent;border:1.5px dashed var(--line);box-shadow:none}
 .k-optional .b{opacity:.65}
 .knock{font-size:13px;color:var(--muted)}
+
+.mealcard{margin:8px 0}.mealhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.splitsw{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.seg3{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.seg3 button{flex:1 1 auto;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:9px 10px;font-weight:600;font-size:14px;min-height:42px;cursor:pointer;transition:background .15s,transform .12s}
+.seg3 button.on{background:linear-gradient(135deg,var(--sea),var(--sea-2));color:#fff;border-color:var(--sea)}.seg3 button:active{transform:scale(.97)}
+.chips2{display:flex;gap:6px;flex-wrap:wrap}.chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:6px 12px;font-size:13px;min-height:34px;cursor:pointer}

@@ -1,7 +1,7 @@
 import { DAYS, CARDS } from '../js/data.js';
 import * as store from './store.js';
 import * as weather from '../js/weather.js';
-import { buildDay, MODES, DEFAULT_MODE, BASE, toStr, toMin } from './engine.js';
+import { buildDay, MODES, DEFAULT_MODE, BASE, MEAL_OPTIONS, DAY_RULES, resolveMeals, toStr, toMin } from './engine.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -25,15 +25,16 @@ function todayDay() {
 const parse = (s, f) => { try { return s ? JSON.parse(s) : f; } catch (e) { return f; } };
 function getPlan(dayId) {
   const m = data.meta.find((x) => x.id === 'plan-' + dayId) || {};
-  return { mode: Number(m.mode) || DEFAULT_MODE[dayId], swims: parse(m.swims, {}), overrides: parse(m.overrides, {}) };
+  return { meals: parse(m.meals, null), swims: parse(m.swims, {}), overrides: parse(m.overrides, {}) };
 }
+const mealsOf = (dayId, plan = getPlan(dayId)) => resolveMeals(dayId, { meals: plan.meals });
 function savePlan(dayId, plan) {
-  store.set('meta', 'plan-' + dayId, { mode: plan.mode, swims: JSON.stringify(plan.swims), overrides: JSON.stringify(plan.overrides), order: 1 });
+  const row = { meals: JSON.stringify(plan.meals), swims: JSON.stringify(plan.swims), overrides: JSON.stringify(plan.overrides) };
+  store.set('meta', 'plan-' + dayId, { ...row, order: 1 });
   const i = data.meta.findIndex((x) => x.id === 'plan-' + dayId);
-  const row = { id: 'plan-' + dayId, mode: plan.mode, swims: JSON.stringify(plan.swims), overrides: JSON.stringify(plan.overrides) };
-  if (i >= 0) data.meta[i] = { ...data.meta[i], ...row }; else data.meta.push(row);
+  if (i >= 0) data.meta[i] = { ...data.meta[i], ...row }; else data.meta.push({ id: 'plan-' + dayId, ...row });
 }
-const compute = (dayId, plan = getPlan(dayId)) => buildDay({ dayId, mode: plan.mode, swims: plan.swims, overrides: plan.overrides, items: data.items.filter((i) => i.day === dayId) });
+const compute = (dayId, plan = getPlan(dayId)) => buildDay({ dayId, meals: plan.meals, swims: plan.swims, overrides: plan.overrides, items: data.items.filter((i) => i.day === dayId) });
 
 // ---- knock-on effects: shopping and bookings follow the meal plan. Rows are flagged, never deleted. ----
 function ensureRow(coll, id, active, fields, flagText) {
@@ -50,14 +51,22 @@ function reconcile(dayId, plan) {
   const d = dayById(dayId), r = compute(dayId, plan), notes = [];
   const flag = '(no longer planned: check)';
   const ent = (k) => r.entries.find((e) => e.key === k);
-  const L = r.meals.lunch, Dn = r.meals.dinner;
-  notes.push(ensureRow('shopping', 'kn-lunch-' + dayId, L === 'lodge', { name: 'Lodge lunch ' + d.short + ': bread, ham, cheese, fruit, yoghurts', aisle: 'Meal plan', done: false }, flag));
-  notes.push(ensureRow('shopping', 'kn-supper-' + dayId, Dn === 'lodge', { name: 'Lodge supper ' + d.short + ': salmon and pasta, or French stick with cheese and ham', aisle: 'Meal plan', done: false }, flag));
-  const lunchVenue = { sun: 'The Ropemaker 01243 373363', wed: 'Ferryboat Inn: ring first' }[dayId] || 'choose a venue';
-  const dinnerVenue = { tue: 'Waterside first choice: book online or 023 9246 5011' }[dayId] || 'choose a venue';
-  notes.push(ensureRow('bookings', 'kn-bklunch-' + dayId, L === 'out', { name: 'Book table: big lunch out (' + d.short + ')', day: dayId, time: ent('lunch') ? toStr(ent('lunch').start) : '', bookBy: 'Before the day', booked: false, notes: lunchVenue }, flag));
-  notes.push(ensureRow('bookings', 'kn-bkdinner-' + dayId, Dn === 'out', { name: 'Book table: nice dinner out (' + d.short + ')', day: dayId, time: ent('dinner') ? toStr(ent('dinner').start) : '', bookBy: 'Before the day', booked: false, notes: dinnerVenue }, flag));
-  notes.push(ensureRow('bookings', 'kn-bksite-' + dayId, Dn === 'site', { name: 'Book Green Room or Missing Squirrel (' + d.short + ')', day: dayId, time: ent('dinner') ? toStr(ent('dinner').start) : '', bookBy: 'Before the day', booked: false, notes: 'Guest Services 02392 460044' }, flag));
+  const tm = (k) => (ent(k) ? toStr(ent(k).start) : '');
+  const m = r.meals;
+  const shop = (id, active, name) => notes.push(ensureRow('shopping', id, active, { name, aisle: 'Meal plan', done: false }, flag));
+  const book = (id, active, name, notesText, time) => notes.push(ensureRow('bookings', id, active, { name, day: dayId, time, bookBy: 'Before the day', booked: false, notes: notesText }, flag));
+  shop('kn-bf-' + dayId, m.breakfast === 'lodge', 'Lodge breakfast ' + d.short + ': cereal or toast, fruit, yoghurt, milk');
+  shop('kn-bfk-' + dayId, m.breakfast === 'lodge' && m.splitB, 'Kids\' breakfast ' + d.short + ': toddler cereal or fruit pots, 4 year old\'s favourites');
+  shop('kn-lunch-' + dayId, m.lunch === 'lodge', (m.splitL ? 'Adults\' lunch ' : 'Lodge lunch ') + d.short + ': bread, ham, cheese, fruit, yoghurts');
+  shop('kn-lunchk-' + dayId, m.splitL, 'Kids\' lunch ' + d.short + ': sandwiches, fruit, yoghurt, easy finger food');
+  shop('kn-supper-' + dayId, m.dinner === 'lodge', 'Lodge supper ' + d.short + ': salmon and pasta, or French stick with cheese and ham');
+  shop('kn-supperk-' + dayId, m.dinner === 'lodge' && m.splitD, 'Kids\' supper ' + d.short + ': pasta, peas, fruit');
+  const lunchVenue = { sat: 'Gunwharf Quays: see the Quays tab', sun: 'The Ropemaker 01243 373363', wed: 'Ferryboat Inn: ring first' }[dayId] || 'choose a venue';
+  book('kn-bkbf-' + dayId, m.breakfast === 'clubhouse', 'Check clubhouse breakfast (' + d.short + ')', 'Times and prices: Unverified. Ask Guest Services 02392 460044', tm('breakfast'));
+  book('kn-bklunch-' + dayId, m.lunch === 'out' && dayId !== 'sat', (m.splitL ? 'Book table: adults\' lunch out (' : 'Book table: big lunch out (') + d.short + ')', lunchVenue, tm('lunch'));
+  book('kn-bklsite-' + dayId, m.lunch === 'site', 'Book on-site lunch (' + d.short + ')', 'Green Room or Missing Squirrel. Guest Services 02392 460044', tm('lunch'));
+  book('kn-bkdinner-' + dayId, m.dinner === 'out', 'Book table: nice dinner out (' + d.short + ')', { tue: 'Waterside first choice: book online or 023 9246 5011' }[dayId] || 'choose a venue', tm('dinner'));
+  book('kn-bksite-' + dayId, m.dinner === 'site', 'Book Green Room or Missing Squirrel (' + d.short + ')', 'Guest Services 02392 460044', tm('dinner'));
   for (const it of data.items.filter((i) => i.day === dayId && i.kind !== 'show' && i.booked)) {
     notes.push(ensureRow('bookings', 'kn-item-' + it.id, true, { name: it.name, day: dayId, time: it.time, bookBy: '', booked: true, notes: 'Added in the Planner' }, flag));
   }
@@ -78,7 +87,7 @@ function weatherHero(day) {
 function entryRow(e, plan, i) {
   const sk = e.kind === 'show';
   const tags = [e.fixed ? '<span class="tag fx">Fixed</span>' : '', e.handSet ? '<span class="tag hand">Set by hand</span>' : '', e.booked ? '<span class="tag">Booked</span>' : '', e.optional ? '<span class="tag skip">Optional</span>' : ''].filter(Boolean).join(' ');
-  const movable = ['lunch', 'dinner', 'nap'].includes(e.key);
+  const movable = /^(breakfast|lunch|dinner)(-kids)?$|^nap$/.test(e.key);
   const act = [];
   if (movable) act.push('<button class="mini" data-act="hand" data-key="' + e.key + '">Set time</button>');
   if (movable && e.handSet) act.push('<button class="mini" data-act="undo" data-key="' + e.key + '">Undo</button>');
@@ -90,7 +99,11 @@ function entryRow(e, plan, i) {
 
 function viewDay(day) {
   const plan = getPlan(day.id), r = compute(day.id, plan);
-  const modes = '<div class="modes">' + [1, 2, 3, 4].map((n) => '<button data-act="mode" data-n="' + n + '" class="' + (plan.mode === n ? 'on' : '') + '">' + n + '. ' + esc(MODES[n].label.split(' + ')[0]) + '<small>' + esc(MODES[n].label.split(' + ')[1] || (n === 3 ? 'Green Room or Missing Squirrel' : 'Lodge lunch and supper')) + '</small></button>').join('') + '</div>';
+  const M = mealsOf(day.id, plan), rl = DAY_RULES[day.id] || {};
+  const row = (letter, title, on) => '<div class="card mealcard"><div class="mealhead"><b>' + title + '</b>' + (on === false ? '' : '<label class="splitsw"><span>Split kids and adults</span><input type="checkbox" class="toggle" data-act="split" data-letter="' + letter + '"' + (M['split' + letter.toUpperCase()] ? ' checked' : '') + '></label>') + '</div>' +
+    (on === false ? '<p class="muted" style="margin:6px 0 0">' + (letter === 'b' ? 'Breakfast at home before you leave.' : 'No dinner here: you are on the road home.') + '</p>' : '<div class="seg3">' + MEAL_OPTIONS[letter].map(([v, l]) => '<button data-act="meal" data-letter="' + letter + '" data-val="' + v + '" class="' + (M[letter] === v ? 'on' : '') + '">' + l + '</button>').join('') + '</div>') + '</div>';
+  const presets = '<div class="chips2">' + [1, 2, 3, 4].map((n) => '<button class="chip" data-act="preset" data-n="' + n + '">' + esc(MODES[n].label) + '</button>').join('') + '</div>';
+  const modes = '<h2 style="margin-top:6px">Meals</h2>' + row('b', 'Breakfast', rl.breakfast === false ? false : undefined) + row('l', 'Lunch') + row('d', 'Dinner', rl.dinner === false ? false : undefined) + '<p class="muted tiny" style="margin:6px 0 2px">Quick presets for lunch and dinner:</p>' + presets;
   const swimsDef = (BASE[day.id] || []).filter((a) => a.toggle);
   const swimSw = swimsDef.length ? '<div class="card"><h3 style="margin-top:0">Swims</h3>' + swimsDef.map((s) => '<label class="sw"><span><b>Swim at ' + s.t + '</b><br><span class="muted tiny">Booked. Arrive ' + toStr(toMin(s.t) - 20) + '. 20 minutes to change before and after.</span></span><input type="checkbox" class="toggle" data-act="swim" data-id="' + s.id + '"' + (plan.swims[s.id] === false ? '' : ' checked') + '></label>').join('') + '</div>' : '';
   const warns = r.warnings.map((w) => '<li class="' + w.level + '">' + esc(w.text) + '</li>').concat(r.reminders.map((t) => '<li class="rem">' + esc(t) + '</li>')).join('');
@@ -98,7 +111,7 @@ function viewDay(day) {
   const freeHtml = r.free.length ? '<h2>Free time</h2>' + r.free.map((f) => '<div class="card free"><b>' + toStr(f.start) + ' to ' + toStr(f.end) + '</b> <span class="muted">free</span><div class="chips">' + Object.values(day.alts || {}).flat().filter((v, i, a) => a.indexOf(v) === i && CARDS[v]).slice(0, 4).map((id) => '<button data-act="suggest" data-card="' + id + '" data-t="' + toStr(f.start) + '">+ ' + esc(CARDS[id].name) + '</button>').join('') + '<button data-act="add-item" data-t="' + toStr(f.start) + '">+ Add your own</button></div></div>').join('') : '';
   const strip = '<nav class="days">' + DAYS.map((d) => '<a href="#' + d.id + '"' + (d.id === day.id ? ' class="on"' : '') + '>' + d.short + '</a>').join('') + '</nav>';
   return strip + weatherHero(day) +
-    '<h2 style="margin-top:6px">Meals</h2>' + modes + swimSw +
+    modes + swimSw +
     (warns ? '<ul class="warns">' + warns + '</ul>' : '') +
     (knockNote ? '<p class="knock">Updated: ' + esc(knockNote) + '.</p>' : '') +
     '<h2>Timeline</h2><ul class="timeline">' + r.entries.map((e, i) => entryRow(e, plan, i)).join('') + '</ul>' +
@@ -146,7 +159,9 @@ function currentDay() { return dayById((location.hash || '#today').slice(1)) || 
 document.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]'); if (!el) return;
   const act = el.dataset.act, day = currentDay();
-  if (act === 'mode') { const p = getPlan(day.id); p.mode = +el.dataset.n; savePlan(day.id, p); afterChange(day.id, p); }
+  if (act === 'meal') { const p = getPlan(day.id), M = mealsOf(day.id, p); p.meals = { ...M, [el.dataset.letter]: el.dataset.val }; savePlan(day.id, p); afterChange(day.id, p); }
+  else if (act === 'split') { const p = getPlan(day.id), M = mealsOf(day.id, p), k = 'split' + el.dataset.letter.toUpperCase(); p.meals = { ...M, [k]: !M[k] }; savePlan(day.id, p); afterChange(day.id, p); }
+  else if (act === 'preset') { const p = getPlan(day.id), M = mealsOf(day.id, p), pr = MODES[+el.dataset.n]; p.meals = { ...M, l: pr.l, d: (DAY_RULES[day.id] || {}).dinner === false ? null : pr.d }; savePlan(day.id, p); afterChange(day.id, p); }
   else if (act === 'hand') {
     const p = getPlan(day.id), k = el.dataset.key, r = compute(day.id, p), e = r.entries.find((x) => x.key === k);
     const fields = [{ n: 't', l: 'Start time', type: 'time', req: true }]; if (k === 'nap') fields.push({ n: 'loc', l: 'Nap location', type: 'select', opts: [['Lodge', 'Lodge'], ['Pushchair', 'Pushchair'], ['Car', 'Car']] });

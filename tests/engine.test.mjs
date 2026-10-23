@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDay, MODES, BASE, DEFAULT_MODE, toMin, toStr } from '../planner/engine.js';
+import { buildDay, MODES, BASE, DEFAULT_MODE, DEFAULT_MEALS, MEAL_OPTIONS, toMin, toStr } from '../planner/engine.js';
 import { SEED, DAYS } from '../js/data.js';
 
 const DAY_IDS = DAYS.map((d) => d.id);
@@ -24,10 +24,14 @@ test('every day x every meal mode x swims on/off: no overlaps, fixed unmoved, na
     for (const a of BASE[day] || []) { const e = r.entries.find((x) => x.key === a.id); if (!e) continue; assert.equal(toStr(e.start), a.t, label + ' ' + a.id + ' moved'); assert.equal(e.end - (a.toggle ? 20 : 0) - toMin(a.t), a.dur, label + ' ' + a.id + ' resized'); }
     // placed meals and nap never overlap a non-travel fixed item
     const hard = r.entries.filter((e) => e.fixed && e.kind !== 'travel');
-    for (const p of r.entries.filter((e) => !e.fixed && ['meal', 'nap'].includes(e.kind) && !e.optional)) for (const f of hard) assert.ok(!hardOverlap(p, f), label + ': ' + p.title + ' overlaps ' + f.title);
+    for (const p of r.entries.filter((e) => !e.fixed && ['meal', 'nap'].includes(e.kind) && !e.optional)) for (const f of hard) {
+      if (p.kind === 'meal' && f.allowMeal) continue; // you eat during Gunwharf
+      if (p.kind === 'nap' && f.napOk) continue; // pushchair nap during an outing
+      assert.ok(!hardOverlap(p, f), label + ': ' + p.title + ' overlaps ' + f.title);
+    }
     // meals and nap do not overlap each other
     const mv = r.entries.filter((e) => !e.fixed && ['meal', 'nap'].includes(e.kind) && !e.optional);
-    for (let a = 0; a < mv.length; a++) for (let b = a + 1; b < mv.length; b++) assert.ok(!hardOverlap(mv[a], mv[b]), label + ': ' + mv[a].title + ' overlaps ' + mv[b].title);
+    for (let a = 0; a < mv.length; a++) for (let b = a + 1; b < mv.length; b++) assert.ok(!hardOverlap(mv[a], mv[b]) || (mv[a].key === 'nap' || mv[b].key === 'nap') && /Adults/.test(mv[a].title + mv[b].title), label + ': ' + mv[a].title + ' overlaps ' + mv[b].title);
     // nap held or a clash warning
     const nap = r.entries.find((e) => e.key === 'nap');
     assert.ok(nap || r.warnings.some((w) => /nap cannot happen/.test(w.text)), label + ': nap neither held nor flagged');
@@ -106,4 +110,70 @@ test('show skipped frees the evening; show Go anchors dinner before it', () => {
   const go = items.map((i) => ({ ...i, go: true }));
   const r2 = buildDay({ dayId: 'tue', mode: 3, items: go });
   const d = r2.entries.find((e) => e.key === 'dinner'); assert.ok(d.end <= toMin('17:40'));
+});
+
+test('Saturday: Gunwharf is fixed, lunch is eaten there, check-in is after 14:30', () => {
+  const r = buildDay({ dayId: 'sat', items: showsFor('sat') });
+  const g = r.entries.find((e) => e.key === 'gunwharf'), l = r.entries.find((e) => e.key === 'lunch'), c = r.entries.find((e) => e.key === 'checkin');
+  assert.equal(toStr(g.start), '11:00');
+  assert.ok(l.start >= g.start && l.end <= g.end, 'lunch inside the Gunwharf visit');
+  assert.ok(toMin('14:30') <= c.start);
+  assert.equal(r.entries.find((e) => e.key === 'nap').loc, 'Pushchair');
+});
+
+test('split lunch: kids eat first, then swim, adults eat during the nap (the Monday example)', () => {
+  const r = buildDay({ dayId: 'mon', meals: { l: 'lodge', splitL: true }, items: showsFor('mon') });
+  const k = r.entries.find((e) => e.key === 'lunch-kids'), a = r.entries.find((e) => e.key === 'lunch'), swim = r.entries.find((e) => e.key === 'swim-mon'), nap = r.entries.find((e) => e.key === 'nap');
+  assert.ok(k && a && nap);
+  assert.ok(k.end <= swim.blockStart, 'kids eat before the swim');
+  assert.ok(k.end <= nap.start, 'kids eat before the nap');
+  assert.ok(Math.abs(k.start - toMin('11:15')) <= 15, 'kids lunch near 11:15');
+  assert.ok(a.start >= swim.end, 'adults eat after the swim');
+  assert.ok(a.start < nap.end && a.end > nap.start, 'adults eat during the nap');
+  assert.match(k.title, /Kids/); assert.match(a.title, /Adults/);
+  // adults out: the toddler sleeps in the pushchair
+  const out = buildDay({ dayId: 'mon', meals: { l: 'out', splitL: true }, items: showsFor('mon') });
+  assert.equal(out.entries.find((e) => e.key === 'nap').loc, 'Pushchair');
+  // unsplit: a single lunch
+  const one = buildDay({ dayId: 'mon', meals: { l: 'lodge', splitL: false }, items: showsFor('mon') });
+  assert.ok(!one.entries.find((e) => e.key === 'lunch-kids'));
+});
+
+test('breakfast: every day has one unless Saturday, lodge or clubhouse, splittable, and never over a fixed item', () => {
+  for (const day of ['sun', 'mon', 'tue', 'wed']) for (const b of ['lodge', 'clubhouse', 'out']) for (const split of [false, true]) {
+    const r = buildDay({ dayId: day, meals: { b, splitB: split }, swims: {}, items: showsFor(day) });
+    const bf = r.entries.find((e) => e.key === 'breakfast'); assert.ok(bf, day + ' ' + b + ' breakfast missing');
+    assert.ok(bf.start >= toMin('07:00') && bf.end <= toMin('10:00'), day + ': breakfast outside the morning');
+    if (split) assert.ok(r.entries.find((e) => e.key === 'breakfast-kids'), day + ': kids breakfast missing');
+    for (const f of r.entries.filter((e) => e.fixed && e.kind !== 'travel')) assert.ok(!hardOverlap(bf, f), day + ' ' + b + ': breakfast overlaps ' + f.title);
+    if (b === 'clubhouse') assert.match(bf.title, /clubhouse/);
+  }
+  const sat = buildDay({ dayId: 'sat', items: showsFor('sat') });
+  assert.ok(!sat.entries.find((e) => e.key === 'breakfast'), 'Saturday breakfast is at home');
+  // Sunday swim arrival 08:40: clubhouse breakfast fits before it
+  const sun = buildDay({ dayId: 'sun', meals: { b: 'clubhouse' }, items: showsFor('sun') });
+  assert.ok(sun.entries.find((e) => e.key === 'breakfast').end <= toMin('08:40'));
+});
+
+test('all meal choices x split options x swims: fixed unmoved, nothing placed over a fixed item, flagged when no gap', () => {
+  let n = 0;
+  for (const day of ['sat', 'sun', 'mon', 'tue', 'wed']) {
+    const swimIds = (BASE[day] || []).filter((a) => a.toggle).map((a) => a.id);
+    for (const b of day === 'sat' ? ['home'] : ['lodge', 'clubhouse', 'out']) for (const l of ['lodge', 'site', 'out']) for (const d of day === 'wed' ? [null] : ['lodge', 'site', 'out']) for (const sB of [false, true]) for (const sL of [false, true]) for (const sD of [false, true]) for (const sw of combos(swimIds)) {
+      n++;
+      const items = showsFor(day), label = [day, b, l, d, sB, sL, sD, JSON.stringify(sw)].join(' ');
+      const r = buildDay({ dayId: day, meals: { b, l, d, splitB: sB, splitL: sL, splitD: sD }, swims: sw, items });
+      for (const a of BASE[day] || []) { const e = r.entries.find((x) => x.key === a.id); if (!e) continue; assert.equal(toStr(e.start), a.t, label + ' moved ' + a.id); }
+      const hard = r.entries.filter((e) => e.fixed && e.kind !== 'travel');
+      for (const p of r.entries.filter((e) => !e.fixed && ['meal', 'nap'].includes(e.kind) && !e.optional)) for (const f of hard) {
+        if (p.kind === 'meal' && f.allowMeal) continue; if (p.kind === 'nap' && f.napOk) continue;
+        assert.ok(!hardOverlap(p, f), label + ': ' + p.title + ' overlaps ' + f.title);
+      }
+      const k = r.entries.find((e) => e.key === 'lunch-kids'), nap = r.entries.find((e) => e.key === 'nap');
+      if (k && nap) assert.ok(k.end <= nap.start || r.warnings.length, label + ': kids lunch must precede the nap');
+      if (!nap) assert.ok(r.warnings.some((w) => /nap cannot happen/.test(w.text)), label);
+      assert.equal(buildDay({ dayId: day, meals: { b, l, d, splitB: sB, splitL: sL, splitD: sD }, swims: sw, items }).entries.length, r.entries.length);
+    }
+  }
+  assert.ok(n > 500, 'swept ' + n);
 });

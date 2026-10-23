@@ -1,6 +1,7 @@
 import { DAYS, CARDS, ESSENTIALS, SLOT_DEFAULT, PARK, MET_OFFICE, BOOKING_SITE, CHECKED } from './data.js';
 import * as store from './store.js';
 import * as weather from './weather.js';
+import { GW, SHOPS, FOOD, CAT_LABELS, search as gwSearch, categoriesFor } from './gunwharf.js';
 const ICONS = { swim: '🏊', nap: '😴', meal: '🍽️', show: '🎭', travel: '🚗', activity: '🎨', outing: '🌳', fixed: '🏨', added: '⭐' };
 
 const $ = (s) => document.querySelector(s);
@@ -89,7 +90,7 @@ function cardHtml(id, full) {
   const c = CARDS[id]; if (!c) return '';
   const rows = [['Opening', c.hours], ['Cost', c.cost], ['Booking', c.booking], ['Drive from park', c.drive], ['Parking', c.parking], ['High chairs and baby change', c.fac]]
     .map(([k, v]) => '<tr><th>' + k + '</th><td>' + esc(v) + '</td></tr>').join('');
-  const links = [c.web ? '<a href="' + esc(c.web) + '" target="_blank" rel="noopener">Website</a>' : '', c.phone ? '<a href="' + tel(c.phone) + '">Call ' + esc(c.phone) + '</a>' : '', c.place ? dirLinks(c.place) : ''].join('');
+  const links = [c.link ? '<a href="#' + c.link[0] + '">' + esc(c.link[1]) + '</a>' : '', c.web ? '<a href="' + esc(c.web) + '" target="_blank" rel="noopener">Website</a>' : '', c.phone ? '<a href="' + tel(c.phone) + '">Call ' + esc(c.phone) + '</a>' : '', c.place ? dirLinks(c.place) : ''].join('');
   if (!full) return '<a class="card mini-card" href="#card/' + id + '"><b>' + esc(c.name) + '</b><div class="muted">' + esc(c.why) + '</div></a>';
   return '<div class="card"><h2>' + esc(c.name) + '</h2><p>' + esc(c.what) + '</p><p><b>Why it suits us:</b> ' + esc(c.why) + '</p><table>' + rows + '</table><div class="links">' + links + '</div>' + srcList(c.src) + '</div>';
 }
@@ -135,10 +136,37 @@ function viewBookings() {
     '<button class="btn" data-act="add-booking">Add a booking</button>';
 }
 
+const getRef = () => { try { return localStorage.getItem('mrh:bookref') || ''; } catch (e) { return ''; } };
+function refCard() {
+  const r = getRef();
+  return '<div class="card"><h3>Booking reference</h3>' + (r ? '<p class="big" style="letter-spacing:.06em">' + esc(r) + '</p><div class="acts"><button class="mini" data-act="copy-ref">Copy</button><button class="mini" data-act="edit-ref">Change</button></div>' : '<p style="margin:0 0 8px">Type it in once. It stays on this phone only.</p><div class="addrow"><input id="refin" placeholder="Booking reference" autocomplete="off" autocapitalize="characters"><button class="btn" data-act="save-ref">Save</button></div>') + '<p class="muted tiny" style="margin:6px 0 0">Kept on this device, never sent to the shared database, because this page is public. It is also in each morning brief message.</p></div>';
+}
 function viewInfo() {
   const groups = { 'On site': 'onsite', 'Food': 'food', 'Days out': 'outing' };
-  return '<h1>Essentials</h1><div class="card">' + ESSENTIALS.map((e) => '<div class="ess"><p><b>' + esc(e.h) + '</b><br>' + esc(e.t) + '</p>' + (e.phone || e.place ? '<div class="links">' + (e.phone ? '<a href="' + tel(e.phone) + '">Call ' + esc(e.phone) + '</a>' : '') + (e.place ? dirLinks(e.place) : '') + '</div>' : '') + srcList(e.src) + '</div>').join('') + '</div>' +
+  return '<h1>Essentials</h1>' + refCard() + '<div class="card">' + ESSENTIALS.map((e) => '<div class="ess"><p><b>' + esc(e.h) + '</b><br>' + esc(e.t) + '</p>' + (e.phone || e.place ? '<div class="links">' + (e.phone ? '<a href="' + tel(e.phone) + '">Call ' + esc(e.phone) + '</a>' : '') + (e.place ? dirLinks(e.place) : '') + '</div>' : '') + srcList(e.src) + '</div>').join('') + '</div>' +
     '<h2>All cards</h2>' + Object.entries(groups).map(([label, type]) => '<h3>' + label + '</h3><div class="grid">' + Object.keys(CARDS).filter((k) => CARDS[k].type === type).map((k) => cardHtml(k, false)).join('') + '</div>').join('');
+}
+
+
+// ---- Gunwharf Quays tab ----
+const gw = { set: 'all', q: '', cats: [] };
+const gwItems = () => (gw.set === 'shops' ? SHOPS : gw.set === 'food' ? FOOD : SHOPS.concat(FOOD));
+function gwResults() {
+  const res = gwSearch(gwItems(), gw.q, gw.cats);
+  const rows = res.map((i) => '<li class="gwrow"><div><b>' + esc(i.name) + '</b> <span class="tag ' + (i.kind === 'food' ? '' : 'skip') + '">' + (i.kind === 'food' ? 'Food' : 'Shop') + '</span><div class="muted tiny">' + esc(i.cats.filter((c) => CAT_LABELS[c]).slice(0, 5).map((c) => CAT_LABELS[c]).join(' · ')) + (i.note ? ' · ' + esc(i.note) : '') + '</div></div></li>').join('');
+  return '<p class="muted tiny" style="margin:6px 0">' + res.length + ' of ' + gwItems().length + (gw.q || gw.cats.length ? ' match' : ' listed') + '</p>' + (rows ? '<ul class="gwlist">' + rows + '</ul>' : '<div class="card"><b>Nothing matches.</b><div class="muted">Try a simpler word, like shirt, shoes, toys or pizza, or clear the filters.</div></div>');
+}
+function gwChips() {
+  return categoriesFor(gwItems()).slice(0, 14).map((c) => '<button class="chip' + (gw.cats.includes(c.cat) ? ' on' : '') + '" data-act="gw-cat" data-cat="' + c.cat + '">' + esc(c.label) + ' <small>' + c.n + '</small></button>').join('');
+}
+function viewGunwharf() {
+  const seg = [['all', 'Everything'], ['shops', 'Shops (' + SHOPS.length + ')'], ['food', 'Food and drink (' + FOOD.length + ')']].map(([k, l]) => '<button class="' + (gw.set === k ? 'on' : '') + '" data-act="gw-set" data-set="' + k + '">' + l + '</button>').join('');
+  return '<section class="hero" style="padding-bottom:22px"><div class="eyebrow">Saturday 24 October · meet friends 11:00</div><h1>Gunwharf Quays</h1><p>Outlet shops and places to eat, Portsmouth</p></section>' +
+    '<div class="card"><p style="margin:0 0 6px"><b>Saturday ' + esc(GW.hours.replace('Saturday ', '')) + '</b></p><p class="muted tiny" style="margin:0 0 6px">' + esc(GW.parking) + '</p><div class="links">' + dirLinks(GW.address) + '<a href="tel:02392836700">Call ' + esc(GW.phone) + '</a><a href="' + GW.web + '" target="_blank" rel="noopener">Website</a></div>' +
+    '<p class="muted tiny">Sources, checked ' + GW.checked + ': <a href="' + GW.srcShops[1] + '" target="_blank" rel="noopener">' + GW.srcShops[0] + '</a>, <a href="' + GW.srcFood[1] + '" target="_blank" rel="noopener">' + GW.srcFood[0] + '</a>, <a href="' + GW.hoursSrc[1] + '" target="_blank" rel="noopener">' + GW.hoursSrc[0] + '</a>, <a href="' + GW.parkingSrc[1] + '" target="_blank" rel="noopener">' + GW.parkingSrc[0] + '</a>. Categories and search words are added by this app, not by Gunwharf.</p></div>' +
+    '<div class="seg">' + seg + '</div>' +
+    '<input id="gwq" class="gwq" type="search" placeholder="Search: menswear, t-shirts, trainers, toys, pizza, coffee" value="' + esc(gw.q) + '" autocomplete="off" autocapitalize="off" spellcheck="false">' +
+    '<div class="chips2" id="gwchips">' + gwChips() + '</div><div id="gwres">' + gwResults() + '</div>';
 }
 
 function render(anim) {
@@ -150,6 +178,7 @@ function render(anim) {
   else if (route[0] === 'packing') html = listView('packing', 'Packing list', 'group', ['Storm-proof travel', 'Swim', 'Halloween', 'Toddler sleep', 'Two kids', 'Car', 'Other']);
   else if (route[0] === 'bookings') html = viewBookings();
   else if (route[0] === 'info') html = viewInfo();
+  else if (route[0] === 'gunwharf') html = viewGunwharf();
   else if (route[0] === 'days') html = '<h1>Days</h1><div class="grid">' + DAYS.map((d) => '<a class="card mini-card" href="#day/' + d.id + '"><b>' + d.long + '</b><div class="muted">' + esc(d.theme) + '</div></a>').join('') + '</div>';
   else { route[0] = 'today'; html = viewDay(todayDay(), true); }
   const keepY = window.scrollY;
@@ -183,8 +212,16 @@ function openForm(title, fields, values, onSave, onDelete) {
 }
 const dayOpts = DAYS.map((d) => [d.id, d.short]);
 
+document.addEventListener('input', (ev) => {
+  if (ev.target.id === 'gwq') { gw.q = ev.target.value; const r = $('#gwres'); if (r) r.innerHTML = gwResults(); }
+});
 document.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]'); if (!el) return;
+  if (el.dataset.act === 'gw-set') { gw.set = el.dataset.set; gw.cats = []; render(); return; }
+  if (el.dataset.act === 'gw-cat') { const c = el.dataset.cat; gw.cats = gw.cats.includes(c) ? gw.cats.filter((x) => x !== c) : gw.cats.concat(c); const r = $('#gwres'); if (r) { r.innerHTML = gwResults(); $('#gwchips').innerHTML = gwChips(); } return; }
+  if (el.dataset.act === 'save-ref') { const v = ($('#refin').value || '').trim(); if (v) { try { localStorage.setItem('mrh:bookref', v); } catch (e) { /* blocked */ } render(); } return; }
+  if (el.dataset.act === 'edit-ref') { try { localStorage.removeItem('mrh:bookref'); } catch (e) { /* blocked */ } render(); return; }
+  if (el.dataset.act === 'copy-ref') { try { navigator.clipboard.writeText(getRef()); el.textContent = 'Copied'; } catch (e) { el.textContent = 'Select and copy'; } return; }
   const act = el.dataset.act, id = el.dataset.id, coll = el.dataset.coll;
   if (act === 'tick') store.update(coll, id, { done: el.checked });
   else if (act === 'booked') store.update('bookings', id, { booked: el.checked });
@@ -206,7 +243,7 @@ document.addEventListener('submit', (ev) => {
 
 // ---- boot ----
 let queued = false;
-const rerender = () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; if (!$('#dlg').open) render(); }); };
+const rerender = () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; const a = document.activeElement; if (!$('#dlg').open && !(a && (a.id === 'gwq' || a.id === 'refin'))) render(); }); };
 window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(true); });
 window.addEventListener('online', rerender); window.addEventListener('offline', rerender);
 
