@@ -34,8 +34,14 @@ export function forDay(date) {
   const hours = [];
   d.hourly.time.forEach((t, k) => { if (t.startsWith(date)) { const h = +t.slice(11, 13); if (h >= 8 && h <= 20) hours.push({ h, rain: d.hourly.precipitation_probability[k], gust: d.hourly.wind_gusts_10m[k] }); } });
   return {
-    summary: codeText(d.daily.weather_code[i]), hi: Math.round(d.daily.temperature_2m_max[i]), lo: Math.round(d.daily.temperature_2m_min[i]),
+    code: d.daily.weather_code[i], summary: codeText(d.daily.weather_code[i]), hi: Math.round(d.daily.temperature_2m_max[i]), lo: Math.round(d.daily.temperature_2m_min[i]),
     gust: Math.round(d.daily.wind_gusts_10m_max[i]), rain: d.daily.precipitation_probability_max[i],
     sunrise: d.daily.sunrise[i].slice(11, 16), sunset: d.daily.sunset[i].slice(11, 16), hours
   };
+}
+
+export function iconFor(c) {
+  if (c === 0) return '☀️'; if (c === 1) return '🌤️'; if (c === 2) return '⛅'; if (c === 3) return '☁️';
+  if (c === 45 || c === 48) return '🌫️'; if (c >= 95) return '⛈️'; if (c >= 71 && c <= 77) return '❄️';
+  if (c >= 51 && c <= 57) return '🌦️'; if (c >= 61 && c <= 67) return '🌧️'; if (c >= 80) return '🌦️'; return '🌡️';
 }
