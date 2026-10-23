@@ -1,5 +1,5 @@
-const VERSION = 'v9';
-const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/data.js', 'js/store.js', 'js/weather.js', 'js/firebase-config.js', 'js/brief-view.js', 'js/gunwharf.js', 'planner/', 'planner/index.html', 'planner/planner.js', 'planner/planner.css', 'planner/engine.js', 'planner/store.js', 'morning/', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
+const VERSION = 'v11';
+const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/data.js', 'js/store.js', 'js/weather.js', 'js/firebase-config.js', 'js/brief-view.js', 'js/gunwharf.js', 'js/activities.js', 'planner/', 'planner/index.html', 'planner/planner.js', 'planner/planner.css', 'planner/engine.js', 'planner/store.js', 'morning/', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

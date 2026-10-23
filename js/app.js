@@ -1,12 +1,14 @@
 import { DAYS, CARDS, ESSENTIALS, SLOT_DEFAULT, PARK, MET_OFFICE, BOOKING_SITE, CHECKED } from './data.js';
 import * as store from './store.js';
 import * as weather from './weather.js';
+import { ACTIVITIES, ACT_CARDS, GUIDE_NOTE, CAT_LABELS as ACT_LABELS } from './activities.js';
 import { GW, SHOPS, FOOD, CAT_LABELS, search as gwSearch, categoriesFor } from './gunwharf.js';
 const ICONS = { swim: '🏊', nap: '😴', meal: '🍽️', show: '🎭', travel: '🚗', activity: '🎨', outing: '🌳', fixed: '🏨', added: '⭐' };
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const data = { shopping: [], packing: [], bookings: [], items: [], briefs: [] };
+const ALLC = { ...CARDS, ...ACT_CARDS };
 const dayById = (id) => DAYS.find((d) => d.id === id);
 
 // ---- dates (always Europe/London) ----
@@ -25,7 +27,7 @@ const fmtTime = (ms) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Lon
 // ---- links ----
 const amaps = (q, mode) => 'https://maps.apple.com/?saddr=' + PARK.lat + ',' + PARK.lon + '&daddr=' + encodeURIComponent(q) + '&dirflg=' + mode;
 const dirLinks = (place) => '<a href="' + amaps(place, 'w') + '" target="_blank" rel="noopener">🚶 Walk there (Apple Maps)</a><a href="' + amaps(place, 'd') + '" target="_blank" rel="noopener">🚗 Drive there (Apple Maps)</a>';
-const srcList = (src) => src && src.length ? '<p class="muted tiny">Sources, checked ' + CHECKED + ': ' + src.map(([l, u]) => '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(l) + '</a>').join(', ') + '</p>' : '<p class="muted tiny">No source: treat as unverified.</p>';
+const srcList = (src) => src && src.length ? '<p class="muted tiny">Sources, checked ' + CHECKED + ': ' + src.map(([l, u]) => u ? '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(l) + '</a>' : esc(l)).join(', ') + '</p>' : '<p class="muted tiny">No source: treat as unverified.</p>';
 const tel = (p) => 'tel:' + p.replace(/\s/g, '');
 
 // ---- pieces ----
@@ -87,7 +89,7 @@ function nextBooking() {
 }
 
 function cardHtml(id, full) {
-  const c = CARDS[id]; if (!c) return '';
+  const c = ALLC[id]; if (!c) return '';
   const rows = [['Opening', c.hours], ['Cost', c.cost], ['Booking', c.booking], ['Drive from park', c.drive], ['Parking', c.parking], ['High chairs and baby change', c.fac]]
     .map(([k, v]) => '<tr><th>' + k + '</th><td>' + esc(v) + '</td></tr>').join('');
   const links = [c.link ? '<a href="#' + c.link[0] + '">' + esc(c.link[1]) + '</a>' : '', c.web ? '<a href="' + esc(c.web) + '" target="_blank" rel="noopener">Website</a>' : '', c.phone ? '<a href="' + tel(c.phone) + '">Call ' + esc(c.phone) + '</a>' : '', c.place ? dirLinks(c.place) : ''].join('');
@@ -124,7 +126,7 @@ function listView(coll, title, groupKey, choices) {
   const groups = {};
   rows.forEach((r) => { (groups[r[groupKey]] = groups[r[groupKey]] || []).push(r); });
   const left = rows.filter((r) => !r.done).length;
-  return '<h1>' + title + '</h1><p class="muted">' + left + ' to go of ' + rows.length + '</p><div class="prog"><i style="width:' + (rows.length ? Math.round(100 * (rows.length - left) / rows.length) : 0) + '%"></i></div>' +
+  return '<div class="seg" style="margin-top:4px"><a class="segl' + (coll === 'shopping' ? ' on' : '') + '" href="#shopping">Shopping list</a><a class="segl' + (coll === 'packing' ? ' on' : '') + '" href="#packing">Packing list</a></div><h1>' + title + '</h1><p class="muted">' + left + ' to go of ' + rows.length + '</p><div class="prog"><i style="width:' + (rows.length ? Math.round(100 * (rows.length - left) / rows.length) : 0) + '%"></i></div>' +
     '<form class="addrow" data-form="' + coll + '"><input name="name" placeholder="Add an item" required autocomplete="off"><select name="group">' + choices.map((c) => '<option>' + esc(c) + '</option>').join('') + '</select><button class="btn">Add</button></form>' +
     Object.keys(groups).map((g) => '<h3>' + esc(g) + '</h3><ul class="checks">' + groups[g].map((r) => '<li class="' + (r.done ? 'done' : '') + '"><label><input type="checkbox" data-act="tick" data-coll="' + coll + '" data-id="' + r.id + '"' + (r.done ? ' checked' : '') + '><span>' + esc(r.name) + '</span></label><button class="mini" data-act="rename" data-coll="' + coll + '" data-id="' + r.id + '">Edit</button><button class="mini del" data-act="del" data-coll="' + coll + '" data-id="' + r.id + '" aria-label="Delete ' + esc(r.name) + '">Delete</button></li>').join('') + '</ul>').join('');
 }
@@ -169,16 +171,72 @@ function viewGunwharf() {
     '<div class="chips2" id="gwchips">' + gwChips() + '</div><div id="gwres">' + gwResults() + '</div>';
 }
 
+
+// ---- Things to do tab ----
+const doState = { where: 'site', q: '', time: '', env: '', t: false, k: false, cats: [] };
+const SUIT = { yes: 'ok', maybe: 'maybe', no: 'not suitable' };
+const mins = (a) => (a.min === a.max ? a.min + ' min' : a.min >= 60 && a.max >= 60 ? (a.min / 60).toFixed(a.min % 60 ? 1 : 0).replace('.0', '') + ' to ' + (a.max / 60).toFixed(a.max % 60 ? 1 : 0).replace('.0', '') + ' hours' : a.min + ' to ' + a.max + ' min');
+function actList() {
+  const q = doState.q.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const out = ACTIVITIES.filter((a) => a.where === doState.where).filter((a) => {
+    const c = ALLC[a.id]; if (!c) return false;
+    const avg = (a.min + a.max) / 2;
+    if (doState.time === 'short' && avg > 60) return false;
+    if (doState.time === 'medium' && (avg <= 60 || avg > 130)) return false;
+    if (doState.time === 'long' && avg <= 130) return false;
+    if (doState.env === 'rain' && a.indoor === 'outdoor') return false;
+    if (doState.env === 'outdoor' && a.indoor === 'indoor') return false;
+    if (doState.t && a.toddler !== 'yes') return false;
+    if (doState.k && a.kid4 !== 'yes') return false;
+    if (doState.cats.length && !doState.cats.every((x) => a.cats.includes(x))) return false;
+    const hay = (c.name + ' ' + c.what + ' ' + a.cats.map((x) => ACT_LABELS[x] || x).join(' ') + ' ' + a.cats.join(' ') + ' ' + (a.indoor === 'outdoor' ? 'outdoor outside' : 'indoor inside rain')).toLowerCase();
+    return q.every((w) => hay.includes(w) || hay.includes(w.replace(/s$/, '')));
+  });
+  const rank = (a) => (a.kid4 === 'yes' ? 0 : a.kid4 === 'maybe' ? 1 : 2) + (a.toddler === 'yes' ? 0 : a.toddler === 'maybe' ? 0.5 : 1);
+  return out.sort((a, b) => rank(a) - rank(b) || a.min - b.min || ALLC[a.id].name.localeCompare(ALLC[b.id].name));
+}
+function actRows() {
+  const list = actList();
+  const rows = list.map((a) => {
+    const c = ALLC[a.id];
+    return '<li class="actrow"><div class="acthead"><a href="#card/' + a.id + '"><b>' + esc(c.name) + '</b></a><span class="tag time">⏱ ' + esc(mins(a)) + '</span></div>' +
+      '<div class="muted">' + esc(c.what.length > 140 ? c.what.slice(0, 137) + '...' : c.what) + '</div>' +
+      '<div class="tags"><span class="tag">' + (a.indoor === 'indoor' ? 'Indoors' : a.indoor === 'outdoor' ? 'Outdoors' : 'Indoors and out') + '</span><span class="tag ' + (a.toddler === 'no' ? 'skip' : '') + '">Toddler: ' + SUIT[a.toddler] + '</span><span class="tag ' + (a.kid4 === 'no' ? 'skip' : '') + '">4 year old: ' + SUIT[a.kid4] + '</span><span class="tag skip">' + esc(a.ages) + '</span><span class="tag skip">' + esc(a.cost) + '</span></div>' +
+      (a.times ? '<div class="muted tiny" style="margin-top:4px">' + (a.where === 'site' && a.id.startsWith('g-') ? 'August guide: ' : 'Booked: ') + esc(a.times) + '</div>' : '') +
+      (a.where === 'off' ? '<div class="muted tiny" style="margin-top:2px">' + esc(c.drive || '') + '</div>' : '') +
+      '<div class="acts"><a class="more" href="#card/' + a.id + '">Details and directions</a><button class="mini" data-act="add-act" data-id="' + a.id + '">Add to a day</button></div></li>';
+  }).join('');
+  return '<p class="muted tiny" style="margin:6px 0">' + list.length + ' ideas. Time needed is a rough estimate and does not include the drive.</p>' + (rows ? '<ul class="gwlist">' + rows + '</ul>' : '<div class="card"><b>Nothing matches.</b><div class="muted">Clear a filter or try a simpler word.</div></div>');
+}
+function actFilters() {
+  const pool = ACTIVITIES.filter((a) => a.where === doState.where);
+  const counts = {}; pool.forEach((a) => a.cats.forEach((c) => { counts[c] = (counts[c] || 0) + 1; }));
+  const cats = Object.entries(counts).filter(([c, n]) => n >= 2 && ACT_LABELS[c] && c !== 'indoor' && c !== 'outdoor').sort((a, b) => b[1] - a[1]).slice(0, 12);
+  const chip = (on, attrs, label) => '<button class="chip' + (on ? ' on' : '') + '" ' + attrs + '>' + label + '</button>';
+  return '<div class="chips2">' + chip(doState.time === 'short', 'data-act="act-time" data-v="short"', 'Under 1 hour') + chip(doState.time === 'medium', 'data-act="act-time" data-v="medium"', '1 to 2 hours') + chip(doState.time === 'long', 'data-act="act-time" data-v="long"', 'Half a day or more') + '</div>' +
+    '<div class="chips2">' + chip(doState.env === 'rain', 'data-act="act-env" data-v="rain"', '☔ Rain-proof') + chip(doState.env === 'outdoor', 'data-act="act-env" data-v="outdoor"', '🌳 Outdoors') + chip(doState.t, 'data-act="act-t"', '👶 Toddler ok') + chip(doState.k, 'data-act="act-k"', '🧒 4 year old ok') + '</div>' +
+    '<div class="chips2">' + cats.map(([c, n]) => chip(doState.cats.includes(c), 'data-act="act-cat" data-cat="' + c + '"', esc(ACT_LABELS[c]) + ' <small>' + n + '</small>')).join('') + '</div>';
+}
+function viewDo() {
+  const seg = [['site', 'On site'], ['off', 'Off site']].map(([k, l]) => '<button class="' + (doState.where === k ? 'on' : '') + '" data-act="act-where" data-v="' + k + '">' + l + ' (' + ACTIVITIES.filter((a) => a.where === k).length + ')</button>').join('');
+  return '<section class="hero" style="padding-bottom:22px"><div class="eyebrow">Ideas for the gaps</div><h1>Things to do</h1><p>Pick something, check the time it needs and add it to a day.</p></section>' +
+    '<div class="seg">' + seg + '</div>' +
+    (doState.where === 'site' ? '<div class="card" style="margin-top:0"><p class="muted tiny" style="margin:0">' + esc(GUIDE_NOTE) + '</p></div>' : '<div class="card" style="margin-top:0"><p class="muted tiny" style="margin:0">Prices, opening times and drive times are from the sources on each card, checked 23 Oct 2026. Anything marked Unverified needs a call. Drive times are rough estimates from the park. Paultons Park is left out.</p></div>') +
+    '<input id="actq" class="gwq" type="search" placeholder="Search: walk, museum, animals, soft play, rain..." value="' + esc(doState.q) + '" autocomplete="off" autocapitalize="off" spellcheck="false">' +
+    '<div id="actf">' + actFilters() + '</div><div id="actres">' + actRows() + '</div>';
+}
+
 function render(anim) {
   const route = (location.hash || '#today').slice(1).split('/');
   let html = '';
   if (route[0] === 'day' && dayById(route[1])) html = viewDay(dayById(route[1]), false);
-  else if (route[0] === 'card' && CARDS[route[1]]) html = '<a href="javascript:history.back()">Back</a>' + cardHtml(route[1], true);
+  else if (route[0] === 'card' && ALLC[route[1]]) html = '<a href="javascript:history.back()">Back</a>' + cardHtml(route[1], true);
   else if (route[0] === 'shopping') html = listView('shopping', 'Shopping list', 'aisle', ['Dairy', 'Bakery', 'Cupboard', 'Drinks', 'Fruit and veg', 'Meat and fish', 'Frozen', 'Baby', 'Household', 'Other']);
   else if (route[0] === 'packing') html = listView('packing', 'Packing list', 'group', ['Storm-proof travel', 'Swim', 'Halloween', 'Toddler sleep', 'Two kids', 'Car', 'Other']);
   else if (route[0] === 'bookings') html = viewBookings();
   else if (route[0] === 'info') html = viewInfo();
   else if (route[0] === 'gunwharf') html = viewGunwharf();
+  else if (route[0] === 'do') html = viewDo();
   else if (route[0] === 'days') html = '<h1>Days</h1><div class="grid">' + DAYS.map((d) => '<a class="card mini-card" href="#day/' + d.id + '"><b>' + d.long + '</b><div class="muted">' + esc(d.theme) + '</div></a>').join('') + '</div>';
   else { route[0] = 'today'; html = viewDay(todayDay(), true); }
   const keepY = window.scrollY;
@@ -186,7 +244,7 @@ function render(anim) {
   v.innerHTML = html;
   v.querySelectorAll('.timeline li, .grid > *').forEach((el, i) => el.style.setProperty('--i', i % 12));
   window.scrollTo(0, keepY);
-  document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === route[0] || (route[0] === 'day' && a.dataset.tab === 'days') || (route[0] === 'card' && a.dataset.tab === 'info')));
+  document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === route[0] || (route[0] === 'packing' && a.dataset.tab === 'shopping') || (route[0] === 'day' && a.dataset.tab === 'days') || (route[0] === 'card' && a.dataset.tab === 'info')));
   const s = $('#status');
   s.textContent = store.mode === 'shared' ? (navigator.onLine ? 'Shared' : 'Offline: changes sync later') : 'Local only: not shared yet';
   s.className = 'status ' + (store.mode === 'shared' && navigator.onLine ? 'ok' : 'warn');
@@ -213,10 +271,27 @@ function openForm(title, fields, values, onSave, onDelete) {
 const dayOpts = DAYS.map((d) => [d.id, d.short]);
 
 document.addEventListener('input', (ev) => {
+  if (ev.target.id === 'actq') { doState.q = ev.target.value; const r = $('#actres'); if (r) r.innerHTML = actRows(); }
   if (ev.target.id === 'gwq') { gw.q = ev.target.value; const r = $('#gwres'); if (r) r.innerHTML = gwResults(); }
 });
 document.addEventListener('click', (ev) => {
   const el = ev.target.closest('[data-act]'); if (!el) return;
+  const A = el.dataset.act;
+  if (A.startsWith('act-')) {
+    if (A === 'act-where') { doState.where = el.dataset.v; doState.cats = []; render(); return; }
+    if (A === 'act-time') doState.time = doState.time === el.dataset.v ? '' : el.dataset.v;
+    else if (A === 'act-env') doState.env = doState.env === el.dataset.v ? '' : el.dataset.v;
+    else if (A === 'act-t') doState.t = !doState.t;
+    else if (A === 'act-k') doState.k = !doState.k;
+    else if (A === 'act-cat') { const c = el.dataset.cat; doState.cats = doState.cats.includes(c) ? doState.cats.filter((x) => x !== c) : doState.cats.concat(c); }
+    $('#actf').innerHTML = actFilters(); $('#actres').innerHTML = actRows(); return;
+  }
+  if (A === 'add-act') {
+    const a = ACTIVITIES.find((x) => x.id === el.dataset.id), c = ALLC[a.id];
+    const today = londonParts().date, d = DAYS.find((x) => x.date === today) || DAYS[0];
+    openForm('Add to a day', [{ n: 'name', l: 'Name', req: true }, { n: 'day', l: 'Day', type: 'select', opts: dayOpts }, { n: 'time', l: 'Start time', type: 'time', req: true }, { n: 'dur', l: 'Duration (minutes)', type: 'number' }, { n: 'place', l: 'Place' }, { n: 'booked', l: 'Booked', type: 'check' }, { n: 'notes', l: 'Notes' }],
+      { name: c.name, day: d.id, time: '', dur: a.max <= 120 ? a.max : Math.round(a.min / 15) * 15, place: a.where === 'site' ? 'On site' : c.place, notes: a.where === 'off' ? c.drive || '' : '' }, (v) => { store.add('items', { ...v, who: 'Whole family', kind: 'added', go: true }); }); return;
+  }
   if (el.dataset.act === 'gw-set') { gw.set = el.dataset.set; gw.cats = []; render(); return; }
   if (el.dataset.act === 'gw-cat') { const c = el.dataset.cat; gw.cats = gw.cats.includes(c) ? gw.cats.filter((x) => x !== c) : gw.cats.concat(c); const r = $('#gwres'); if (r) { r.innerHTML = gwResults(); $('#gwchips').innerHTML = gwChips(); } return; }
   if (el.dataset.act === 'save-ref') { const v = ($('#refin').value || '').trim(); if (v) { try { localStorage.setItem('mrh:bookref', v); } catch (e) { /* blocked */ } render(); } return; }

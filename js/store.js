@@ -30,7 +30,7 @@ function seedLocal() {
 }
 
 export async function init() {
-  if (!FIREBASE_CONFIG) { seedLocal(); return; }
+  if (!FIREBASE_CONFIG || /[?&]local=1/.test(location.search)) { seedLocal(); return; } // ?local=1 is a test switch: never touches shared data
   try {
     const app = await import(SDK + 'firebase-app.js');
     const auth = await import(SDK + 'firebase-auth.js');

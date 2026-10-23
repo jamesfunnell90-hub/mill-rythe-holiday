@@ -1,4 +1,6 @@
 import { DAYS, CARDS } from '../js/data.js';
+import { ACTIVITIES, ACT_CARDS } from '../js/activities.js';
+const ALLC = { ...CARDS, ...ACT_CARDS };
 import * as store from './store.js';
 import * as weather from '../js/weather.js';
 import { buildDay, MODES, DEFAULT_MODE, BASE, MEAL_OPTIONS, DAY_RULES, resolveMeals, toStr, toMin } from './engine.js';
@@ -108,7 +110,9 @@ function viewDay(day) {
   const swimSw = swimsDef.length ? '<div class="card"><h3 style="margin-top:0">Swims</h3>' + swimsDef.map((s) => '<label class="sw"><span><b>Swim at ' + s.t + '</b><br><span class="muted tiny">Booked. Arrive ' + toStr(toMin(s.t) - 20) + '. 20 minutes to change before and after.</span></span><input type="checkbox" class="toggle" data-act="swim" data-id="' + s.id + '"' + (plan.swims[s.id] === false ? '' : ' checked') + '></label>').join('') + '</div>' : '';
   const warns = r.warnings.map((w) => '<li class="' + w.level + '">' + esc(w.text) + '</li>').concat(r.reminders.map((t) => '<li class="rem">' + esc(t) + '</li>')).join('');
   const skipped = data.items.filter((i) => i.day === day.id && i.kind === 'show' && !i.go);
-  const freeHtml = r.free.length ? '<h2>Free time</h2>' + r.free.map((f) => '<div class="card free"><b>' + toStr(f.start) + ' to ' + toStr(f.end) + '</b> <span class="muted">free</span><div class="chips">' + Object.values(day.alts || {}).flat().filter((v, i, a) => a.indexOf(v) === i && CARDS[v]).slice(0, 4).map((id) => '<button data-act="suggest" data-card="' + id + '" data-t="' + toStr(f.start) + '">+ ' + esc(CARDS[id].name) + '</button>').join('') + '<button data-act="add-item" data-t="' + toStr(f.start) + '">+ Add your own</button></div></div>').join('') : '';
+  const wet = (weather.forDay(day.date)?.rain ?? 0) >= 60;
+  const ideas = (win) => ACTIVITIES.filter((a) => a.kid4 === 'yes' && a.toddler !== 'no' && a.min <= win && (a.where === 'site' || a.min + 60 <= win) && !(wet && a.indoor === 'outdoor') && !a.id.startsWith('g-cinema') && a.id !== 'pool').sort((a, b) => (a.toddler === 'yes' ? 0 : 1) - (b.toddler === 'yes' ? 0 : 1) || b.min - a.min).slice(0, 5);
+  const freeHtml = r.free.length ? '<h2>Free time</h2><p class="muted tiny" style="margin-top:-4px">' + (wet ? 'Rain likely, so outdoor ideas are hidden. ' : '') + 'Ideas that fit the gap. Off-site ideas leave room for the drive. Full list: Things to do in the Holiday app.</p>' + r.free.map((f) => { const win = f.end - f.start; return '<div class="card free"><b>' + toStr(f.start) + ' to ' + toStr(f.end) + '</b> <span class="muted">' + win + ' min free</span><div class="chips">' + ideas(win).map((a) => '<button data-act="suggest" data-card="' + a.id + '" data-t="' + toStr(f.start) + '" data-win="' + win + '">+ ' + esc(ALLC[a.id].name) + ' <small>' + a.min + (a.max !== a.min ? ' to ' + a.max : '') + ' min</small></button>').join('') + '<button data-act="add-item" data-t="' + toStr(f.start) + '">+ Add your own</button></div></div>'; }).join('') : '';
   const strip = '<nav class="days">' + DAYS.map((d) => '<a href="#' + d.id + '"' + (d.id === day.id ? ' class="on"' : '') + '>' + d.short + '</a>').join('') + '</nav>';
   return strip + weatherHero(day) +
     modes + swimSw +
@@ -171,7 +175,7 @@ document.addEventListener('click', (ev) => {
   else if (act === 'swim') { const p = getPlan(day.id); p.swims[el.dataset.id] = el.checked; savePlan(day.id, p); afterChange(day.id, p); }
   else if (act === 'toggle-go') { const it = data.items.find((x) => x.id === el.dataset.id); store.set('items', it.id, { go: !it.go }); it.go = !it.go; afterChange(it.day); }
   else if (act === 'add-item') openForm('Add an activity', itemFields, { day: el.dataset.day || day.id, time: el.dataset.t || '', dur: 45, place: 'On site', who: 'Whole family' }, (v) => { store.add('items', { ...v, kind: 'added', go: true }); afterChange(v.day); });
-  else if (act === 'suggest') { const c = CARDS[el.dataset.card]; openForm('Add to day', itemFields, { name: c.name, day: day.id, time: el.dataset.t, dur: 60, place: c.place === 'Mill Rythe Coastal Village, Havant Road, Hayling Island PO11 0PB' ? 'On site' : c.place, who: 'Whole family', notes: '' }, (v) => { store.add('items', { ...v, kind: 'added', go: true }); afterChange(v.day); }); }
+  else if (act === 'suggest') { const c = ALLC[el.dataset.card], ac = ACTIVITIES.find((x) => x.id === el.dataset.card), win = +el.dataset.win || 60; openForm('Add to day', itemFields, { name: c.name, day: day.id, time: el.dataset.t, dur: Math.max(15, Math.floor(Math.min(ac ? ac.max : 60, win) / 5) * 5), place: c.place === 'Mill Rythe Coastal Village, Havant Road, Hayling Island PO11 0PB' ? 'On site' : c.place, who: 'Whole family', notes: '' }, (v) => { store.add('items', { ...v, kind: 'added', go: true }); afterChange(v.day); }); }
   else if (act === 'edit-item') { const it = data.items.find((x) => x.id === el.dataset.id); openForm('Edit', itemFields, it, (v) => { store.set('items', it.id, v); Object.assign(it, v); afterChange(v.day); }, () => { store.remove('items', it.id); data.items = data.items.filter((x) => x.id !== it.id); afterChange(it.day); }); }
 });
 
